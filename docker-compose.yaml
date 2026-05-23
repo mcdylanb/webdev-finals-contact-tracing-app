@@ -1,0 +1,70 @@
+name: pickleball-v2
+
+services:
+  app:
+    image: php:8.2-apache
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:80"
+    volumes:
+      - ./app:/var/www/html
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE:-pickleball}
+      DB_USER: ${MYSQL_USER:-pickleball}
+      DB_PASS: ${MYSQL_PASSWORD:-pickleball_pw}
+    command: sh -c "docker-php-ext-install mysqli && apache2-foreground"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - pickleball_net
+
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    command:
+      - --default-authentication-plugin=caching_sha2_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_pw}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-pickleball}
+      MYSQL_USER: ${MYSQL_USER:-pickleball}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-pickleball_pw}
+    ports:
+      - "${DB_PORT:-3307}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root_pw}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - pickleball_net
+
+  phpmyadmin:
+    image: phpmyadmin:5
+    restart: unless-stopped
+    ports:
+      - "${PMA_PORT:-8081}:80"
+    environment:
+      PMA_HOST: db  # Stays as 'db'
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 64M
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - pickleball_net
+
+volumes:
+  mysql_data:
+
+networks:
+  pickleball_net:
+    driver: bridge
